@@ -30,26 +30,33 @@ type Artifact struct {
 	Name     string
 	Cmd      string
 	Artifact string
+	Version  *agtversion.ParsedSemVer
+	Filename string
+	FilePath string
 }
 
-// GetArtifactName constructs a path to a downloaded artifact
-func GetArtifactName(a Artifact, version agtversion.ParsedSemVer, operatingSystem, arch string) (string, error) {
-	key := fmt.Sprintf("%s-binary-%s", operatingSystem, arch)
+func New(version *agtversion.ParsedSemVer, settings *Config, fips bool) (Artifact, error) {
+	var cmd string
+	if fips {
+		cmd = "elastic-agent-fips"
+	} else {
+		cmd = "elastic-agent"
+	}
+
+	key := fmt.Sprintf("%s-binary-%s", settings.OS(), settings.Arch())
 	suffix, found := packageArchMap[key]
 	if !found {
-		return "", errors.New(fmt.Sprintf("'%s' is not a valid combination for a package", key), errors.TypeConfig)
+		return Artifact{}, errors.New(fmt.Sprintf("'%s' is not a valid combination for a package", key), errors.TypeConfig)
 	}
 
-	return fmt.Sprintf("%s-%s-%s", a.Cmd, version.String(), suffix), nil
-}
+	filename := fmt.Sprintf("%s-%s-%s", cmd, version.VersionWithPrerelease(), suffix)
 
-// GetArtifactPath returns a full path of artifact for a program in specific version
-func GetArtifactPath(a Artifact, version agtversion.ParsedSemVer, operatingSystem, arch, targetDir string) (string, error) {
-	artifactName, err := GetArtifactName(a, version, operatingSystem, arch)
-	if err != nil {
-		return "", err
-	}
-
-	fullPath := filepath.Join(targetDir, artifactName)
-	return fullPath, nil
+	return Artifact{
+		Name:     "Elastic Agent",
+		Cmd:      cmd,
+		Artifact: "beats/elastic-agent",
+		Version:  version,
+		Filename: filename,
+		FilePath: filepath.Join(settings.TargetDirectory, filename),
+	}, nil
 }

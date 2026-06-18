@@ -19,6 +19,7 @@ import (
 	filecopy "github.com/otiai10/copy"
 	"go.elastic.co/apm/v2"
 
+	"github.com/elastic/elastic-agent-libs/transport/httpcommon"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/filelock"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/info"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/paths"
@@ -53,12 +54,6 @@ const (
 	fipsPrefix         = "-fips"
 )
 
-var agentArtifact = artifact.Artifact{
-	Name:     "Elastic Agent",
-	Cmd:      AgentName,
-	Artifact: "beats/" + AgentName,
-}
-
 var (
 	ErrWatcherNotStarted    = errors.New("watcher did not start in time")
 	ErrUpgradeSameVersion   = errors.New("upgrade did not occur because it is the same version")
@@ -74,14 +69,8 @@ var (
 	Version_9_4_0_SNAPSHOT = agtversion.NewParsedSemVer(9, 4, 0, "SNAPSHOT", "")
 )
 
-func init() {
-	if release.FIPSDistribution() {
-		agentArtifact.Cmd += fipsPrefix
-	}
-}
-
 type artifactDownloadHandler interface {
-	downloadArtifact(ctx context.Context, parsedVersion *agtversion.ParsedSemVer, sourceURI string, upgradeDetails *details.Details, skipVerifyOverride, skipDefaultPgp bool, pgpBytes ...string) (_ string, err error)
+	downloadArtifact(ctx context.Context, agentArtifact artifact.Artifact, sourceURI string, upgradeDetails *details.Details, skipVerifyOverride, skipDefaultPgp bool, pgpBytes ...string) (_ string, err error)
 	withFleetServerURI(fleetServerURI string)
 }
 type unpackHandler interface {
@@ -414,7 +403,22 @@ func (u *Upgrader) Upgrade(ctx context.Context, version string, rollback bool, s
 		return nil, fmt.Errorf("error parsing version %q: %w", version, err)
 	}
 
-	archivePath, err := u.artifactDownloader.downloadArtifact(ctx, parsedVersion, sourceURI, det, skipVerifyOverride, skipDefaultPgp, pgpBytes...)
+	agentArtifact, err := artifact.New(parsedVersion, u.settings, release.FIPSDistribution())
+	if err != nil {
+		return nil, fmt.Errorf("error building agent artifact: %w", err)
+	}
+
+	client, err := u.settings.HTTPTransportSettings.Client(httpcommon.WithAPMHTTPInstrumentation())
+	if err != nil {
+		return nil, fmt.Errorf("error creating http client to resolve source URI: %w", err)
+	}
+
+	sourceURI, err = Resolver{}.Resolve(ctx, client, agentArtifact, sourceURI)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving source URI: %w", err)
+	}
+
+	archivePath, err := u.artifactDownloader.downloadArtifact(ctx, agentArtifact, sourceURI, det, skipVerifyOverride, skipDefaultPgp, pgpBytes...)
 
 	// If the artifactPath is not empty, then the artifact was downloaded.
 	// There may still be an error in the download process, so we need to add

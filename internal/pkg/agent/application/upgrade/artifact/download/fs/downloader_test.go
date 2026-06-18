@@ -27,23 +27,15 @@ type file struct {
 }
 
 func TestDownloader_Download(t *testing.T) {
-	type fields struct {
-		config *artifact.Config
-	}
-	type args struct {
-		a       artifact.Artifact
-		version *agtversion.ParsedSemVer
-	}
 	tests := []struct {
-		name    string
-		files   []file
-		fields  fields
-		args    args
-		want    string
-		wantErr assert.ErrorAssertionFunc
+		name     string
+		filename string
+		files    []file
+		wantErr  assert.ErrorAssertionFunc
 	}{
 		{
-			name: "happy path released version",
+			name:     "happy path released version",
+			filename: "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 			files: []file{
 				{
 					"elastic-agent-1.2.3-linux-x86_64.tar.gz",
@@ -54,36 +46,22 @@ func TestDownloader_Download(t *testing.T) {
 					[]byte("somesha512 elastic-agent-1.2.3-linux-x86_64.tar.gz"),
 				},
 			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "")},
-			want:    "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 			wantErr: assert.NoError,
 		},
 		{
-			name: "no hash released version",
+			name:     "no hash released version",
+			filename: "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 			files: []file{
 				{
 					"elastic-agent-1.2.3-linux-x86_64.tar.gz",
 					[]byte("This is a fake linux elastic agent archive"),
 				},
 			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "")},
-			want:    "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 			wantErr: assert.Error,
 		},
 		{
-			name: "happy path snapshot version",
+			name:     "happy path snapshot version",
+			filename: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 			files: []file{
 				{
 					"elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
@@ -94,72 +72,27 @@ func TestDownloader_Download(t *testing.T) {
 					[]byte("somesha512 elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz"),
 				},
 			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "")},
-			want:    "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
-			wantErr: assert.NoError,
-		},
-		{
-			name: "happy path released version with build metadata",
-			files: []file{
-				{
-					"elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz",
-					[]byte("This is a fake linux elastic agent archive"),
-				},
-				{
-					"elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz.sha512",
-					[]byte("somesha512 elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "build19700101")},
-			want:    "elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz",
-			wantErr: assert.NoError,
-		},
-		{
-			name: "happy path snapshot version with build metadata",
-			files: []file{
-				{
-					"elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz",
-					[]byte("This is a fake linux elastic agent archive"),
-				},
-				{
-					"elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz.sha512",
-					[]byte("somesha512 elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "build19700101")},
-			want:    "elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz",
 			wantErr: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			dropPath := t.TempDir()
 			targetDirPath := t.TempDir()
 
 			createFiles(t, dropPath, tt.files)
 
-			config := tt.fields.config
-			config.DropPath = dropPath
-			config.TargetDirectory = targetDirPath
+			config := &artifact.Config{
+				OperatingSystem: "linux",
+				Architecture:    "64",
+				DropPath:        dropPath,
+				TargetDirectory: targetDirPath,
+			}
+
+			a := artifact.Artifact{
+				Filename: tt.filename,
+				FilePath: filepath.Join(targetDirPath, tt.filename),
+			}
 
 			e := &Downloader{
 				dropPath: dropPath,
@@ -168,11 +101,11 @@ func TestDownloader_Download(t *testing.T) {
 				mkdirAll: os.MkdirAll,
 				openFile: os.OpenFile,
 			}
-			got, err := e.Download(context.TODO(), tt.args.a, tt.args.version)
-			if !tt.wantErr(t, err, fmt.Sprintf("Download(%v, %v)", tt.args.a, tt.args.version)) {
+			got, err := e.Download(context.TODO(), a, "")
+			if !tt.wantErr(t, err, fmt.Sprintf("Download(%v)", a)) {
 				return
 			}
-			assert.Equalf(t, filepath.Join(targetDirPath, tt.want), got, "Download(%v, %v)", tt.args.a, tt.args.version)
+			assert.Equalf(t, a.FilePath, got, "Download(%v)", a)
 		})
 	}
 }
@@ -186,91 +119,32 @@ func createFiles(t *testing.T, dstPath string, files []file) {
 }
 
 func TestDownloader_DownloadAsc(t *testing.T) {
-	type fields struct {
-		config *artifact.Config
-	}
-	type args struct {
-		a       artifact.Artifact
-		version agtversion.ParsedSemVer
-	}
 	tests := []struct {
-		name    string
-		files   []file
-		fields  fields
-		args    args
-		want    string
-		wantErr assert.ErrorAssertionFunc
+		name     string
+		filename string
+		files    []file
+		wantErr  assert.ErrorAssertionFunc
 	}{
 		{
-			name: "happy path released version",
+			name:     "happy path released version",
+			filename: "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 			files: []file{
 				{
 					"elastic-agent-1.2.3-linux-x86_64.tar.gz.asc",
 					[]byte("fake signature for elastic-agent package"),
 				},
 			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: *agtversion.NewParsedSemVer(1, 2, 3, "", "")},
-			want:    "elastic-agent-1.2.3-linux-x86_64.tar.gz.asc",
 			wantErr: assert.NoError,
 		},
 		{
-			name: "happy path snapshot version",
+			name:     "happy path snapshot version",
+			filename: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 			files: []file{
 				{
 					"elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz.asc",
 					[]byte("fake signature for elastic-agent package"),
 				},
 			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: *agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "")},
-			want:    "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz.asc",
-			wantErr: assert.NoError,
-		},
-		{
-			name: "happy path released version with build metadata",
-			files: []file{
-				{
-					"elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz.asc",
-					[]byte("fake signature for elastic-agent package"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: *agtversion.NewParsedSemVer(1, 2, 3, "", "build19700101")},
-			want:    "elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz.asc",
-			wantErr: assert.NoError,
-		},
-		{
-			name: "happy path snapshot version with build metadata",
-			files: []file{
-				{
-					"elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz.asc",
-					[]byte("fake signature for elastic-agent package"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: *agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "build19700101")},
-			want:    "elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz.asc",
 			wantErr: assert.NoError,
 		},
 	}
@@ -281,9 +155,17 @@ func TestDownloader_DownloadAsc(t *testing.T) {
 
 			createFiles(t, dropPath, tt.files)
 
-			config := tt.fields.config
-			config.DropPath = dropPath
-			config.TargetDirectory = targetDirPath
+			config := &artifact.Config{
+				OperatingSystem: "linux",
+				Architecture:    "64",
+				DropPath:        dropPath,
+				TargetDirectory: targetDirPath,
+			}
+
+			a := artifact.Artifact{
+				Filename: tt.filename,
+				FilePath: filepath.Join(targetDirPath, tt.filename),
+			}
 
 			e := &Downloader{
 				dropPath: dropPath,
@@ -292,11 +174,11 @@ func TestDownloader_DownloadAsc(t *testing.T) {
 				mkdirAll: os.MkdirAll,
 				openFile: os.OpenFile,
 			}
-			got, err := e.DownloadAsc(context.TODO(), tt.args.a, tt.args.version)
-			if !tt.wantErr(t, err, fmt.Sprintf("DownloadAsc(%v, %v)", tt.args.a, tt.args.version)) {
+			got, err := e.DownloadAsc(context.TODO(), a)
+			if !tt.wantErr(t, err, fmt.Sprintf("DownloadAsc(%v)", a)) {
 				return
 			}
-			assert.Equalf(t, filepath.Join(targetDirPath, tt.want), got, "DownloadAsc(%v, %v)", tt.args.a, tt.args.version)
+			assert.Equalf(t, a.FilePath+".asc", got, "DownloadAsc(%v)", a)
 		})
 	}
 }
@@ -349,12 +231,10 @@ func TestDownloadDiskSpaceError(t *testing.T) {
 			err = os.MkdirAll(config.TargetDirectory, 0o755)
 			require.NoError(t, err)
 
-			parsedVersion := agtversion.NewParsedSemVer(1, 2, 3, "", "")
-
-			artifactName, err := artifact.GetArtifactName(agentSpec, *parsedVersion, config.OS(), config.Arch())
+			a, err := artifact.New(agtversion.NewParsedSemVer(1, 2, 3, "", ""), config, false)
 			require.NoError(t, err)
 
-			sourceArtifactPath := filepath.Join(config.DropPath, artifactName)
+			sourceArtifactPath := filepath.Join(config.DropPath, a.Filename)
 			sourceArtifactHashPath := sourceArtifactPath + ".sha512"
 
 			err = os.WriteFile(sourceArtifactPath, []byte("test"), 0o666)
@@ -365,7 +245,7 @@ func TestDownloadDiskSpaceError(t *testing.T) {
 
 			downloader := NewDownloader(config)
 			tc.mockStdlibFuncs(downloader)
-			targetArtifactPath, err := downloader.Download(context.Background(), agentSpec, parsedVersion)
+			targetArtifactPath, err := downloader.Download(context.Background(), a, "")
 
 			require.ErrorIs(t, err, tc.expectedError)
 

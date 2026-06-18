@@ -98,7 +98,10 @@ func runTests(t *testing.T, testCases []testCase, td *testDials, config *artifac
 			downloader, err := NewDownloader(log, config, upgradeDetails)
 			require.NoError(t, err, "could not create new downloader")
 
-			pkgPath, err := downloader.Download(cancelCtx, beatSpec, version)
+			a := beatArtifact(tc.suffix, config.TargetDirectory)
+			uri := artifactURI(a, config.SourceURI)
+
+			pkgPath, err := downloader.Download(cancelCtx, a, uri)
 			require.NoErrorf(t, err, "failed downloading %s v%s",
 				beatSpec.Artifact, version)
 
@@ -112,7 +115,7 @@ func runTests(t *testing.T, testCases []testCase, td *testDials, config *artifac
 				t.Fatal(err)
 			}
 
-			err = testVerifier.Verify(cancelCtx, beatSpec, *version, false)
+			err = testVerifier.Verify(cancelCtx, a, uri, false)
 			require.NoError(t, err)
 		})
 	}

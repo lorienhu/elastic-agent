@@ -16,7 +16,6 @@ import (
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/upgrade/artifact/download"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/errors"
 	"github.com/elastic/elastic-agent/pkg/core/logger"
-	agtversion "github.com/elastic/elastic-agent/pkg/version"
 )
 
 const (
@@ -66,24 +65,17 @@ func NewVerifier(log *logger.Logger, config *artifact.Config, pgp []byte) (*Veri
 
 // Verify checks downloaded package on preconfigured
 // location against a key stored on elastic.co website.
-func (v *Verifier) Verify(ctx context.Context, a artifact.Artifact, version agtversion.ParsedSemVer, skipDefaultPgp bool, pgpBytes ...string) error {
-	filename, err := artifact.GetArtifactName(a, version, v.config.OS(), v.config.Arch())
-	if err != nil {
-		return fmt.Errorf("could not get artifact name: %w", err)
-	}
-
-	artifactPath := filepath.Join(v.config.TargetDirectory, filename)
-
-	if err = download.VerifySHA512HashWithCleanup(v.log, artifactPath); err != nil {
+func (v *Verifier) Verify(ctx context.Context, a artifact.Artifact, _ string, skipDefaultPgp bool, pgpBytes ...string) error {
+	if err := download.VerifySHA512HashWithCleanup(v.log, a.FilePath); err != nil {
 		return fmt.Errorf("failed to verify SHA512 hash: %w", err)
 	}
 
-	if err = v.verifyAsc(filename, artifactPath, skipDefaultPgp, pgpBytes...); err != nil {
+	if err := v.verifyAsc(a.Filename, a.FilePath, skipDefaultPgp, pgpBytes...); err != nil {
 		var invalidSignatureErr *download.InvalidSignatureError
 		if errors.As(err, &invalidSignatureErr) {
-			if err := os.Remove(artifactPath + ".asc"); err != nil {
+			if err := os.Remove(a.FilePath + ".asc"); err != nil {
 				v.log.Warnf("failed clean up after signature verification: failed to remove %q: %v",
-					artifactPath+".asc", err)
+					a.FilePath+".asc", err)
 			}
 		}
 		return err

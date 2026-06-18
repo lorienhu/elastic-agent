@@ -40,19 +40,36 @@ var (
 type testCase struct {
 	system string
 	arch   string
+	suffix string
 }
 
 func getTestCases() []testCase {
 	// always test random package to save time
 	return []testCase{
-		{"linux", "32"},
-		{"linux", "64"},
-		{"linux", "arm64"},
-		{"darwin", "32"},
-		{"darwin", "64"},
-		{"windows", "32"},
-		{"windows", "64"},
+		{"linux", "32", "linux-x86.tar.gz"},
+		{"linux", "64", "linux-x86_64.tar.gz"},
+		{"linux", "arm64", "linux-arm64.tar.gz"},
+		{"darwin", "32", "darwin-x86_64.tar.gz"},
+		{"darwin", "64", "darwin-x86_64.tar.gz"},
+		{"windows", "32", "windows-x86.zip"},
+		{"windows", "64", "windows-x86_64.zip"},
 	}
+}
+
+func beatArtifact(suffix, targetDir string) artifact.Artifact {
+	filename := fmt.Sprintf("%s-%s-%s", beatSpec.Cmd, version, suffix)
+	return artifact.Artifact{
+		Name:     beatSpec.Name,
+		Cmd:      beatSpec.Cmd,
+		Artifact: beatSpec.Artifact,
+		Version:  version,
+		Filename: filename,
+		FilePath: filepath.Join(targetDir, filename),
+	}
+}
+
+func artifactURI(a artifact.Artifact, base string) string {
+	return strings.TrimRight(base, "/") + "/" + a.Artifact + "/" + a.Filename
 }
 
 type extResCode map[string]struct {

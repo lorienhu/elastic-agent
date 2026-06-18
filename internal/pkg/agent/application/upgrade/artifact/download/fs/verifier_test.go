@@ -30,12 +30,6 @@ import (
 
 var testVersion = agtversion.NewParsedSemVer(7, 5, 1, "", "")
 
-var agentSpec = artifact.Artifact{
-	Name:     "Elastic Agent",
-	Cmd:      "elastic-agent",
-	Artifact: "beat/elastic-agent",
-}
-
 func TestFetchVerify(t *testing.T) {
 	fipsutils.SkipIfFIPSOnly(t, "verifier being tested uses an OpenPGP key which results in a SHA-1 violation.")
 	// See docs/pgp-sign-verify-artifact.md for how to generate a key, export
@@ -47,18 +41,7 @@ func TestFetchVerify(t *testing.T) {
 	installPath := filepath.Join("testdata", "install")
 	targetPath := filepath.Join("testdata", "download")
 	ctx := context.Background()
-	a := artifact.Artifact{
-		Name: "elastic-agent", Cmd: "elastic-agent", Artifact: "beats/elastic-agent",
-	}
 	version := agtversion.NewParsedSemVer(8, 0, 0, "", "")
-
-	filename := "elastic-agent-8.0.0-darwin-x86_64.tar.gz"
-	targetFilePath := filepath.Join(targetPath, filename)
-	hashTargetFilePath := filepath.Join(targetPath, filename+".sha512")
-	ascTargetFilePath := filepath.Join(targetPath, filename+".asc")
-
-	// cleanup
-	defer os.RemoveAll(targetPath)
 
 	config := &artifact.Config{
 		TargetDirectory: targetPath,
@@ -71,7 +54,18 @@ func TestFetchVerify(t *testing.T) {
 		},
 	}
 
-	err := prepareFetchVerifyTests(dropPath, targetPath, filename, targetFilePath, hashTargetFilePath)
+	a, err := artifact.New(version, config, false)
+	require.NoError(t, err)
+
+	filename := a.Filename
+	targetFilePath := a.FilePath
+	hashTargetFilePath := targetFilePath + ".sha512"
+	ascTargetFilePath := targetFilePath + ".asc"
+
+	// cleanup
+	defer os.RemoveAll(targetPath)
+
+	err = prepareFetchVerifyTests(dropPath, targetPath, filename, targetFilePath, hashTargetFilePath)
 	require.NoError(t, err)
 
 	pgp, err := os.ReadFile(filepath.Join(dropPath, "public-key.pgp"))
@@ -82,7 +76,7 @@ func TestFetchVerify(t *testing.T) {
 	// first download verify should fail:
 	// download skipped, as invalid package is prepared upfront
 	// verify fails and cleans download
-	err = verifier.Verify(ctx, a, *version, false)
+	err = verifier.Verify(ctx, a, "", false)
 	var checksumErr *download.ChecksumMismatchError
 	require.ErrorAs(t, err, &checksumErr)
 
@@ -95,7 +89,7 @@ func TestFetchVerify(t *testing.T) {
 	// second one should pass
 	// download not skipped: package missing
 	// verify passes because hash is not correct
-	_, err = NewDownloader(config).Download(ctx, a, version)
+	_, err = NewDownloader(config).Download(ctx, a, "")
 	require.NoError(t, err)
 	asc, err := os.ReadFile(filepath.Join(dropPath, filename+".asc"))
 	require.NoErrorf(t, err, "could not open .asc for copy")
@@ -111,7 +105,7 @@ func TestFetchVerify(t *testing.T) {
 	_, err = os.Stat(ascTargetFilePath)
 	require.NoError(t, err)
 
-	err = verifier.Verify(ctx, a, *version, false)
+	err = verifier.Verify(ctx, a, "", false)
 	require.NoError(t, err)
 
 	// Bad GPG public key.
@@ -128,7 +122,7 @@ func TestFetchVerify(t *testing.T) {
 
 	// Missing .asc file.
 	{
-		err = verifier.Verify(ctx, a, *version, false)
+		err = verifier.Verify(ctx, a, "", false)
 		require.Error(t, err)
 
 		// Don't delete these files when GPG validation failure.
@@ -141,7 +135,7 @@ func TestFetchVerify(t *testing.T) {
 		err = os.WriteFile(targetFilePath+".asc", []byte("bad sig"), 0o600)
 		require.NoError(t, err)
 
-		err = verifier.Verify(ctx, a, *version, false)
+		err = verifier.Verify(ctx, a, "", false)
 		var invalidSigErr *download.InvalidSignatureError
 		assert.ErrorAs(t, err, &invalidSigErr)
 
@@ -222,12 +216,15 @@ func TestVerify(t *testing.T) {
 				},
 			}
 
-			pgpKey := prepareTestCase(t, agentSpec, testVersion, config)
+			a, err := artifact.New(testVersion, config, false)
+			require.NoError(t, err)
+
+			pgpKey := prepareTestCase(t, a, config)
 
 			testClient := NewDownloader(config)
-			artifactPath, err := testClient.Download(ctx, agentSpec, testVersion)
+			artifactPath, err := testClient.Download(ctx, a, "")
 			require.NoError(t, err, "fs.Downloader could not download artifacts")
-			_, err = testClient.DownloadAsc(context.Background(), agentSpec, *testVersion)
+			_, err = testClient.DownloadAsc(context.Background(), a)
 			require.NoError(t, err, "fs.Downloader could not download artifacts .asc file")
 
 			_, err = os.Stat(artifactPath)
@@ -236,7 +233,7 @@ func TestVerify(t *testing.T) {
 			testVerifier, err := NewVerifier(log, config, pgpKey)
 			require.NoError(t, err)
 
-			err = testVerifier.Verify(ctx, agentSpec, *testVersion, false, tc.RemotePGPUris...)
+			err = testVerifier.Verify(ctx, a, "", false, tc.RemotePGPUris...)
 			require.NoError(t, err)
 
 			// log message informing remote PGP was skipped
@@ -246,18 +243,14 @@ func TestVerify(t *testing.T) {
 	}
 }
 
-// prepareTestCase creates an artifact file, defined by 'a' and 'version',
-// its corresponding checksum (.sha512) and signature (.asc) files.
-// It creates the necessary key to sing the artifact and returns the public key
-// to verify the signature.
-func prepareTestCase(t *testing.T, a artifact.Artifact, version *agtversion.ParsedSemVer, cfg *artifact.Config) []byte {
-	filename, err := artifact.GetArtifactName(a, *version, cfg.OperatingSystem, cfg.Architecture)
-	require.NoErrorf(t, err, "could not get artifact name")
-
-	err = os.MkdirAll(cfg.DropPath, 0777)
+// prepareTestCase creates an artifact file, its corresponding checksum (.sha512)
+// and signature (.asc) files. It creates the necessary key to sign the artifact
+// and returns the public key to verify the signature.
+func prepareTestCase(t *testing.T, a artifact.Artifact, cfg *artifact.Config) []byte {
+	err := os.MkdirAll(cfg.DropPath, 0777)
 	require.NoErrorf(t, err, "failed creating directory %q", cfg.DropPath)
 
-	filePath := filepath.Join(cfg.DropPath, filename)
+	filePath := filepath.Join(cfg.DropPath, a.Filename)
 	filePathSHA := filePath + ".sha512"
 	filePathASC := filePath + ".asc"
 
@@ -266,7 +259,7 @@ func prepareTestCase(t *testing.T, a artifact.Artifact, version *agtversion.Pars
 	require.NoErrorf(t, err, "could not write %q file", filePath)
 
 	hash := sha512.Sum512(content)
-	hashContent := fmt.Sprintf("%x %s", hash, filename)
+	hashContent := fmt.Sprintf("%x %s", hash, a.Filename)
 	err = os.WriteFile(filePathSHA, []byte(hashContent), 0644)
 	require.NoErrorf(t, err, "could not write %q file", filePathSHA)
 

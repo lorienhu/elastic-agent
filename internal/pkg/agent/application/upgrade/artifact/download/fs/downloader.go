@@ -17,7 +17,6 @@ import (
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/paths"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/application/upgrade/artifact"
 	"github.com/elastic/elastic-agent/internal/pkg/agent/errors"
-	agtversion "github.com/elastic/elastic-agent/pkg/version"
 )
 
 const (
@@ -47,7 +46,7 @@ func NewDownloader(config *artifact.Config) *Downloader {
 
 // Download fetches the package from configured source.
 // Returns absolute path to downloaded package and an error.
-func (e *Downloader) Download(ctx context.Context, a artifact.Artifact, version *agtversion.ParsedSemVer) (_ string, err error) {
+func (e *Downloader) Download(ctx context.Context, a artifact.Artifact, _ string) (_ string, err error) {
 	span, ctx := apm.StartSpan(ctx, "download", "app.internal")
 	defer span.End()
 	downloadedFiles := make([]string, 0, 2)
@@ -61,50 +60,27 @@ func (e *Downloader) Download(ctx context.Context, a artifact.Artifact, version 
 	}()
 
 	// download from source to dest
-	path, err := e.download(e.config.OS(), a, *version, "")
+	path, err := e.downloadFile(a.Filename, a.FilePath)
 	downloadedFiles = append(downloadedFiles, path)
 	if err != nil {
 		return "", err
 	}
 
-	hashPath, err := e.download(e.config.OS(), a, *version, ".sha512")
+	hashPath, err := e.downloadFile(a.Filename+".sha512", a.FilePath+".sha512")
 	downloadedFiles = append(downloadedFiles, hashPath)
 	return path, err
 }
 
 // DownloadAsc downloads the package .asc file from configured source.
 // It returns absolute path to the downloaded file and a no-nil error if any occurs.
-func (e *Downloader) DownloadAsc(_ context.Context, a artifact.Artifact, version agtversion.ParsedSemVer) (string, error) {
-	path, err := e.download(e.config.OS(), a, version, ".asc")
+func (e *Downloader) DownloadAsc(_ context.Context, a artifact.Artifact) (string, error) {
+	path, err := e.downloadFile(a.Filename+".asc", a.FilePath+".asc")
 	if err != nil {
 		os.Remove(path)
 		return "", err
 	}
 
 	return path, nil
-}
-
-func (e *Downloader) download(
-	operatingSystem string,
-	a artifact.Artifact,
-	version agtversion.ParsedSemVer,
-	extension string) (string, error) {
-	filename, err := artifact.GetArtifactName(a, version, operatingSystem, e.config.Arch())
-	if err != nil {
-		return "", errors.New(err, "generating package name failed")
-	}
-
-	fullPath, err := artifact.GetArtifactPath(a, version, operatingSystem, e.config.Arch(), e.config.TargetDirectory)
-	if err != nil {
-		return "", errors.New(err, "generating package path failed")
-	}
-
-	if extension != "" {
-		filename += extension
-		fullPath += extension
-	}
-
-	return e.downloadFile(filename, fullPath)
 }
 
 func (e *Downloader) downloadFile(filename, fullPath string) (string, error) {

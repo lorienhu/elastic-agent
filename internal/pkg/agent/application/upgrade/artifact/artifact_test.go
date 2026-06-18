@@ -5,6 +5,7 @@
 package artifact
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,42 +13,71 @@ import (
 	agtversion "github.com/elastic/elastic-agent/pkg/version"
 )
 
-func TestGetArtifactName(t *testing.T) {
-	version, err := agtversion.ParseVersion("9.1.0")
-	require.NoError(t, err)
-
+func TestNew(t *testing.T) {
 	tests := map[string]struct {
-		a            Artifact
-		version      agtversion.ParsedSemVer
+		version      *agtversion.ParsedSemVer
+		os           string
 		arch         string
+		fips         bool
 		expectedName string
 	}{
-		"no_fips_arm64": {
-			a:            Artifact{Cmd: "elastic-agent"},
-			version:      *version,
+		"linux_arm64": {
+			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
+			os:           "linux",
 			arch:         "arm64",
 			expectedName: "elastic-agent-9.1.0-linux-arm64.tar.gz",
 		},
-		"fips_x86": {
-			a:            Artifact{Cmd: "elastic-agent-fips"},
-			version:      *version,
-			arch:         "32",
-			expectedName: "elastic-agent-fips-9.1.0-linux-x86.tar.gz",
-		},
-		"fips_x86_64": {
-			a:            Artifact{Cmd: "elastic-agent-fips"},
-			version:      *version,
+		"fips": {
+			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
+			os:           "linux",
 			arch:         "64",
+			fips:         true,
 			expectedName: "elastic-agent-fips-9.1.0-linux-x86_64.tar.gz",
+		},
+		"linux_x86": {
+			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
+			os:           "linux",
+			arch:         "32",
+			expectedName: "elastic-agent-9.1.0-linux-x86.tar.gz",
+		},
+		"linux_x86_64": {
+			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
+			os:           "linux",
+			arch:         "64",
+			expectedName: "elastic-agent-9.1.0-linux-x86_64.tar.gz",
+		},
+		"snapshot": {
+			version:      agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", ""),
+			os:           "linux",
+			arch:         "64",
+			expectedName: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
+		},
+		"build metadata is dropped": {
+			version:      agtversion.NewParsedSemVer(1, 2, 3, "", "build19700101"),
+			os:           "linux",
+			arch:         "64",
+			expectedName: "elastic-agent-1.2.3-linux-x86_64.tar.gz",
+		},
+		"snapshot build metadata is dropped": {
+			version:      agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "build19700101"),
+			os:           "linux",
+			arch:         "64",
+			expectedName: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			artifactName, err := GetArtifactName(test.a, test.version, "linux", test.arch)
+			settings := &Config{
+				OperatingSystem: test.os,
+				Architecture:    test.arch,
+				TargetDirectory: "/tmp/downloads",
+			}
+
+			a, err := New(test.version, settings, test.fips)
 			require.NoError(t, err)
-			require.Equal(t, test.expectedName, artifactName)
+			require.Equal(t, test.expectedName, a.Filename)
+			require.Equal(t, filepath.Join("/tmp/downloads", test.expectedName), a.FilePath)
 		})
 	}
-
 }

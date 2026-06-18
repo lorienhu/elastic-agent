@@ -65,9 +65,10 @@ func TestDownload(t *testing.T) {
 			config.OperatingSystem = testCase.system
 			config.Architecture = testCase.arch
 
+			a := beatArtifact(testCase.suffix, targetDir)
 			upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
 			testClient := NewDownloaderWithClient(log, config, elasticClient, upgradeDetails)
-			artifactPath, err := testClient.Download(context.Background(), beatSpec, version)
+			artifactPath, err := testClient.Download(context.Background(), a, artifactURI(a, source))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,7 +118,9 @@ func TestDownloadBodyError(t *testing.T) {
 	log, obs := loggertest.New("downloader")
 	upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
 	testClient := NewDownloaderWithClient(log, config, *client, upgradeDetails)
-	artifactPath, err := testClient.Download(context.Background(), beatSpec, version)
+	a := beatArtifact("linux-x86_64.tar.gz", targetDir)
+	expectedURL := artifactURI(a, srv.URL)
+	artifactPath, err := testClient.Download(context.Background(), a, expectedURL)
 	os.Remove(artifactPath)
 	if err == nil {
 		t.Fatal("expected Download to return an error")
@@ -126,7 +129,6 @@ func TestDownloadBodyError(t *testing.T) {
 	infoLogs := obs.FilterLevelExact(zapcore.InfoLevel).TakeAll()
 	warnLogs := obs.FilterLevelExact(zapcore.WarnLevel).TakeAll()
 
-	expectedURL := fmt.Sprintf("%s/%s-%s-%s", srv.URL, "beats/agentbeat/agentbeat", version, "linux-x86_64.tar.gz")
 	expectedMsg := fmt.Sprintf("download from %s failed at 0B @ NaNBps: unexpected EOF", expectedURL)
 	require.GreaterOrEqual(t, len(infoLogs), 1, "download error not logged at info level")
 	assert.True(t, containsMessage(infoLogs, expectedMsg))
@@ -174,11 +176,11 @@ func TestDownloadLogProgressWithLength(t *testing.T) {
 	log, obs := loggertest.New("downloader")
 	upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
 	testClient := NewDownloaderWithClient(log, config, *client, upgradeDetails)
-	artifactPath, err := testClient.Download(context.Background(), beatSpec, version)
+	a := beatArtifact("linux-x86_64.tar.gz", targetDir)
+	expectedURL := artifactURI(a, srv.URL)
+	artifactPath, err := testClient.Download(context.Background(), a, expectedURL)
 	os.Remove(artifactPath)
 	require.NoError(t, err, "Download should not have errored")
-
-	expectedURL := fmt.Sprintf("%s/%s-%s-%s", srv.URL, "beats/agentbeat/agentbeat", version, "linux-x86_64.tar.gz")
 	expectedProgressRegexp := regexp.MustCompile(
 		`^download progress from ` + expectedURL + `(.sha512)? is \S+/\S+ \(\d+\.\d{2}% complete\) @ \S+$`,
 	)
@@ -257,11 +259,11 @@ func TestDownloadLogProgressWithoutLength(t *testing.T) {
 	log, obs := loggertest.New("downloader")
 	upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
 	testClient := NewDownloaderWithClient(log, config, *client, upgradeDetails)
-	artifactPath, err := testClient.Download(context.Background(), beatSpec, version)
+	a := beatArtifact("linux-x86_64.tar.gz", targetDir)
+	expectedURL := artifactURI(a, srv.URL)
+	artifactPath, err := testClient.Download(context.Background(), a, expectedURL)
 	os.Remove(artifactPath)
 	require.NoError(t, err, "Download should not have errored")
-
-	expectedURL := fmt.Sprintf("%s/%s-%s-%s", srv.URL, "beats/agentbeat/agentbeat", version, "linux-x86_64.tar.gz")
 	expectedProgressRegexp := regexp.MustCompile(
 		`^download progress from ` + expectedURL + `(.sha512)? has fetched \S+ @ \S+$`,
 	)
@@ -440,50 +442,6 @@ func TestDownloadVersion(t *testing.T) {
 			want:    "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 			wantErr: assert.NoError,
 		},
-		{
-			name: "happy path released version with build metadata",
-			files: map[string]downloadHttpResponse{
-				"/beat/elastic-agent/elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz": {
-					statusCode: http.StatusOK,
-					Body:       []byte("This is a fake linux elastic agent archive"),
-				},
-				"/beat/elastic-agent/elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz.sha512": {
-					statusCode: http.StatusOK,
-					Body:       []byte("somesha512 elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "build19700101")},
-			want:    "elastic-agent-1.2.3+build19700101-linux-x86_64.tar.gz",
-			wantErr: assert.NoError,
-		},
-		{
-			name: "happy path snapshot version with build metadata",
-			files: map[string]downloadHttpResponse{
-				"/beat/elastic-agent/elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz": {
-					statusCode: http.StatusOK,
-					Body:       []byte("This is a fake linux elastic agent archive"),
-				},
-				"/beat/elastic-agent/elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz.sha512": {
-					statusCode: http.StatusOK,
-					Body:       []byte("somesha512 elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz"),
-				},
-			},
-			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
-			},
-			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "build19700101")},
-			want:    "elastic-agent-1.2.3-SNAPSHOT+build19700101-linux-x86_64.tar.gz",
-			wantErr: assert.NoError,
-		},
 	}
 
 	for _, tt := range tests {
@@ -520,13 +478,18 @@ func TestDownloadVersion(t *testing.T) {
 			config.TargetDirectory = targetDirPath
 			downloader := NewDownloaderWithClient(log, config, *elasticClient, upgradeDetails)
 
-			got, err := downloader.Download(context.TODO(), tt.args.a, tt.args.version)
+			a := tt.args.a
+			a.Version = tt.args.version
+			a.Filename = tt.want
+			a.FilePath = filepath.Join(targetDirPath, tt.want)
 
-			if !tt.wantErr(t, err, fmt.Sprintf("Download(%v, %v)", tt.args.a, tt.args.version)) {
+			got, err := downloader.Download(context.TODO(), a, artifactURI(a, server.URL))
+
+			if !tt.wantErr(t, err, fmt.Sprintf("Download(%v)", a)) {
 				return
 			}
 
-			assert.Equalf(t, filepath.Join(targetDirPath, tt.want), got, "Download(%v, %v)", tt.args.a, tt.args.version)
+			assert.Equalf(t, a.FilePath, got, "Download(%v)", a)
 		})
 	}
 }
@@ -604,13 +567,14 @@ func TestDownloadDiskSpaceError(t *testing.T) {
 				config.OperatingSystem = testCase.system
 				config.Architecture = testCase.arch
 
+				a := beatArtifact(testCase.suffix, targetDir)
 				upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
 				testClient := NewDownloaderWithClient(log, config, elasticClient, upgradeDetails)
 				etc.mockStdlibFuncs(testClient)
 				testClient.isDiskSpaceErrorFunc = func(err error) bool {
 					return etc.isDiskSpaceErrorResult
 				}
-				artifactPath, err := testClient.Download(context.Background(), beatSpec, version)
+				artifactPath, err := testClient.Download(context.Background(), a, artifactURI(a, source))
 
 				require.ErrorIs(t, err, etc.expectedError, "expected error mismatch")
 				require.NoFileExists(t, artifactPath)
