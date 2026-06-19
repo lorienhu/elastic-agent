@@ -83,8 +83,6 @@ func TestDownloader_Download(t *testing.T) {
 			createFiles(t, dropPath, tt.files)
 
 			config := &artifact.Config{
-				OperatingSystem: "linux",
-				Architecture:    "64",
 				DropPath:        dropPath,
 				TargetDirectory: targetDirPath,
 			}
@@ -156,8 +154,6 @@ func TestDownloader_DownloadAsc(t *testing.T) {
 			createFiles(t, dropPath, tt.files)
 
 			config := &artifact.Config{
-				OperatingSystem: "linux",
-				Architecture:    "64",
 				DropPath:        dropPath,
 				TargetDirectory: targetDirPath,
 			}
@@ -231,7 +227,7 @@ func TestDownloadDiskSpaceError(t *testing.T) {
 			err = os.MkdirAll(config.TargetDirectory, 0o755)
 			require.NoError(t, err)
 
-			a, err := artifact.New(agtversion.NewParsedSemVer(1, 2, 3, "", ""), config, false)
+			a, err := artifact.New(agtversion.NewParsedSemVer(1, 2, 3, "", ""), config, "linux", "amd64", false)
 			require.NoError(t, err)
 
 			sourceArtifactPath := filepath.Join(config.DropPath, a.Filename)

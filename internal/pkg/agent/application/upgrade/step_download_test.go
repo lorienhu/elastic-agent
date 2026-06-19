@@ -372,7 +372,7 @@ func TestDownloadArtifact(t *testing.T) {
 				TargetDirectory: paths.Downloads(),
 			}
 
-			agentArtifact, err := artifact.New(parsedVersion, &settings, false)
+			agentArtifact, err := artifact.New(parsedVersion, &settings, "linux", "amd64", false)
 			require.NoError(t, err)
 
 			a := newArtifactDownloader(&settings, testLogger)

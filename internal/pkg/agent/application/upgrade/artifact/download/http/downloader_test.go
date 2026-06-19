@@ -62,8 +62,6 @@ func TestDownload(t *testing.T) {
 	for _, testCase := range testCases {
 		testName := fmt.Sprintf("%s-binary-%s", testCase.system, testCase.arch)
 		t.Run(testName, func(t *testing.T) {
-			config.OperatingSystem = testCase.system
-			config.Architecture = testCase.arch
 
 			a := beatArtifact(testCase.suffix, targetDir)
 			upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")
@@ -111,8 +109,6 @@ func TestDownloadBodyError(t *testing.T) {
 	config := &artifact.Config{
 		SourceURI:       srv.URL,
 		TargetDirectory: targetDir,
-		OperatingSystem: "linux",
-		Architecture:    "64",
 	}
 
 	log, obs := loggertest.New("downloader")
@@ -166,8 +162,6 @@ func TestDownloadLogProgressWithLength(t *testing.T) {
 	config := &artifact.Config{
 		SourceURI:       srv.URL,
 		TargetDirectory: targetDir,
-		OperatingSystem: "linux",
-		Architecture:    "64",
 		HTTPTransportSettings: httpcommon.HTTPTransportSettings{
 			Timeout: totalTime,
 		},
@@ -249,8 +243,6 @@ func TestDownloadLogProgressWithoutLength(t *testing.T) {
 	config := &artifact.Config{
 		SourceURI:       srv.URL,
 		TargetDirectory: targetDir,
-		OperatingSystem: "linux",
-		Architecture:    "64",
 		HTTPTransportSettings: httpcommon.HTTPTransportSettings{
 			Timeout: totalTime,
 		},
@@ -393,10 +385,7 @@ func TestDownloadVersion(t *testing.T) {
 				},
 			},
 			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
+				config: &artifact.Config{},
 			},
 			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "")},
 			want:    "elastic-agent-1.2.3-linux-x86_64.tar.gz",
@@ -411,10 +400,7 @@ func TestDownloadVersion(t *testing.T) {
 				},
 			},
 			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
+				config: &artifact.Config{},
 			},
 			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "", "")},
 			want:    "elastic-agent-1.2.3-linux-x86_64.tar.gz",
@@ -433,10 +419,7 @@ func TestDownloadVersion(t *testing.T) {
 				},
 			},
 			fields: fields{
-				config: &artifact.Config{
-					OperatingSystem: "linux",
-					Architecture:    "64",
-				},
+				config: &artifact.Config{},
 			},
 			args:    args{a: agentSpec, version: agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "")},
 			want:    "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
@@ -564,8 +547,6 @@ func TestDownloadDiskSpaceError(t *testing.T) {
 
 			testName := fmt.Sprintf("%s-binary-%s-%s", testCase.system, testCase.arch, name)
 			t.Run(testName, func(t *testing.T) {
-				config.OperatingSystem = testCase.system
-				config.Architecture = testCase.arch
 
 				a := beatArtifact(testCase.suffix, targetDir)
 				upgradeDetails := details.NewDetails("8.12.0", details.StateRequested, "")

@@ -92,11 +92,9 @@ func TestResolve(t *testing.T) {
 			}
 
 			settings := &artifact.Config{
-				OperatingSystem: "linux",
-				Architecture:    "64",
 				TargetDirectory: t.TempDir(),
 			}
-			a, err := artifact.New(tt.version, settings, false)
+			a, err := artifact.New(tt.version, settings, "linux", "amd64", false)
 			require.NoError(t, err)
 
 			got, err := Resolver{}.Resolve(context.TODO(), client, a, artifact.DefaultSourceURI)

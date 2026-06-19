@@ -12,17 +12,15 @@ import (
 	agtversion "github.com/elastic/elastic-agent/pkg/version"
 )
 
-var packageArchMap = map[string]string{
-	"linux-binary-32":         "linux-x86.tar.gz",
-	"linux-binary-64":         "linux-x86_64.tar.gz",
-	"linux-binary-arm64":      "linux-arm64.tar.gz",
-	"windows-binary-32":       "windows-x86.zip",
-	"windows-binary-64":       "windows-x86_64.zip",
-	"windows-binary-arm64":    "windows-arm64.zip",
-	"darwin-binary-32":        "darwin-x86_64.tar.gz",
-	"darwin-binary-64":        "darwin-x86_64.tar.gz",
-	"darwin-binary-arm64":     "darwin-aarch64.tar.gz",
-	"darwin-binary-universal": "darwin-universal.tar.gz",
+var packageArchMap = map[struct{ os, arch string }]string{
+	{"linux", "386"}:     "linux-x86.tar.gz",
+	{"linux", "amd64"}:   "linux-x86_64.tar.gz",
+	{"linux", "arm64"}:   "linux-arm64.tar.gz",
+	{"windows", "386"}:   "windows-x86.zip",
+	{"windows", "amd64"}: "windows-x86_64.zip",
+	{"windows", "arm64"}: "windows-arm64.zip",
+	{"darwin", "amd64"}:  "darwin-x86_64.tar.gz",
+	{"darwin", "arm64"}:  "darwin-aarch64.tar.gz",
 }
 
 // Artifact provides info for fetching from artifact store.
@@ -35,7 +33,7 @@ type Artifact struct {
 	FilePath string
 }
 
-func New(version *agtversion.ParsedSemVer, settings *Config, fips bool) (Artifact, error) {
+func New(version *agtversion.ParsedSemVer, settings *Config, os, arch string, fips bool) (Artifact, error) {
 	var cmd string
 	if fips {
 		cmd = "elastic-agent-fips"
@@ -43,10 +41,9 @@ func New(version *agtversion.ParsedSemVer, settings *Config, fips bool) (Artifac
 		cmd = "elastic-agent"
 	}
 
-	key := fmt.Sprintf("%s-binary-%s", settings.OS(), settings.Arch())
-	suffix, found := packageArchMap[key]
+	suffix, found := packageArchMap[struct{ os, arch string }{os, arch}]
 	if !found {
-		return Artifact{}, errors.New(fmt.Sprintf("'%s' is not a valid combination for a package", key), errors.TypeConfig)
+		return Artifact{}, errors.New(fmt.Sprintf("'%s/%s' is not a valid combination for a package", os, arch), errors.TypeConfig)
 	}
 
 	filename := fmt.Sprintf("%s-%s-%s", cmd, version.VersionWithPrerelease(), suffix)

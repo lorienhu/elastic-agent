@@ -47,14 +47,12 @@ func TestFetchVerify(t *testing.T) {
 		TargetDirectory: targetPath,
 		DropPath:        dropPath,
 		InstallPath:     installPath,
-		OperatingSystem: "darwin",
-		Architecture:    "32",
 		HTTPTransportSettings: httpcommon.HTTPTransportSettings{
 			Timeout: timeout,
 		},
 	}
 
-	a, err := artifact.New(version, config, false)
+	a, err := artifact.New(version, config, "darwin", "amd64", false)
 	require.NoError(t, err)
 
 	filename := a.Filename
@@ -209,14 +207,12 @@ func TestVerify(t *testing.T) {
 			config := &artifact.Config{
 				TargetDirectory: targetDir,
 				DropPath:        filepath.Join(targetDir, "drop"),
-				OperatingSystem: "linux",
-				Architecture:    "32",
 				HTTPTransportSettings: httpcommon.HTTPTransportSettings{
 					Timeout: timeout,
 				},
 			}
 
-			a, err := artifact.New(testVersion, config, false)
+			a, err := artifact.New(testVersion, config, "linux", "amd64", false)
 			require.NoError(t, err)
 
 			pgpKey := prepareTestCase(t, a, config)

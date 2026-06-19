@@ -30,38 +30,38 @@ func TestNew(t *testing.T) {
 		"fips": {
 			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
 			os:           "linux",
-			arch:         "64",
+			arch:         "amd64",
 			fips:         true,
 			expectedName: "elastic-agent-fips-9.1.0-linux-x86_64.tar.gz",
 		},
 		"linux_x86": {
 			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
 			os:           "linux",
-			arch:         "32",
+			arch:         "386",
 			expectedName: "elastic-agent-9.1.0-linux-x86.tar.gz",
 		},
 		"linux_x86_64": {
 			version:      agtversion.NewParsedSemVer(9, 1, 0, "", ""),
 			os:           "linux",
-			arch:         "64",
+			arch:         "amd64",
 			expectedName: "elastic-agent-9.1.0-linux-x86_64.tar.gz",
 		},
 		"snapshot": {
 			version:      agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", ""),
 			os:           "linux",
-			arch:         "64",
+			arch:         "amd64",
 			expectedName: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 		},
 		"build metadata is dropped": {
 			version:      agtversion.NewParsedSemVer(1, 2, 3, "", "build19700101"),
 			os:           "linux",
-			arch:         "64",
+			arch:         "amd64",
 			expectedName: "elastic-agent-1.2.3-linux-x86_64.tar.gz",
 		},
 		"snapshot build metadata is dropped": {
 			version:      agtversion.NewParsedSemVer(1, 2, 3, "SNAPSHOT", "build19700101"),
 			os:           "linux",
-			arch:         "64",
+			arch:         "amd64",
 			expectedName: "elastic-agent-1.2.3-SNAPSHOT-linux-x86_64.tar.gz",
 		},
 	}
@@ -69,12 +69,10 @@ func TestNew(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			settings := &Config{
-				OperatingSystem: test.os,
-				Architecture:    test.arch,
 				TargetDirectory: "/tmp/downloads",
 			}
 
-			a, err := New(test.version, settings, test.fips)
+			a, err := New(test.version, settings, test.os, test.arch, test.fips)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedName, a.Filename)
 			require.Equal(t, filepath.Join("/tmp/downloads", test.expectedName), a.FilePath)
